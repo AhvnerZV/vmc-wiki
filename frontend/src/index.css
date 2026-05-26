@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { box-sizing: border-box; }
+
+body {
+  background: #0C0D12;
+  color: #F0F0F0;
+  font-family: "Barlow", sans-serif;
+  margin: 0;
+}
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #1E2530; border-radius: 2px; }
+
+.wiki-content p { margin-bottom: 0.75rem; line-height: 1.65; }
