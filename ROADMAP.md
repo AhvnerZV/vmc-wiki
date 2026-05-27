@@ -1,88 +1,83 @@
 # Roadmap: v0.0 to v1.0
 
-This document outlines the full build plan for taking the Volleyball Wiki LLM
-from a working proof-of-concept (v0.0) to a production-ready partnership demo (v1.0).
+---
+
+## Version Timeline
+
+| Version | Milestone | Status |
+|---|---|---|
+| v0.0 | Working RAG prototype, 7 players, Streamlit | Done |
+| v0.1 | LLM Wiki pipeline, React frontend, D3 graph | Done |
+| v0.2 | 18+ players, expanded content, drill library | Next |
+| v0.5 | FastAPI backend, hosted deployment, auth layer | Planned |
+| v0.8 | Widget mode, analytics, content sync endpoint | Planned |
+| v1.0 | Full pitch package, live demo URL, outreach | Planned |
 
 ---
 
-## Current State (v0.0)
+## Phase 1 (v0.0) — Done
 
 - 7 players in the knowledge base
 - RAG pipeline: ChromaDB + OpenAI embeddings + GPT-4o-mini
 - Streamlit frontend with dark court aesthetic
 - Local-only, single-user, no auth
-- Knowledge base is manually written text files
 
 ---
 
-## Phase 1. Knowledge Base Expansion
+## Phase 2 (v0.1) — Done
 
-**Goal:** Cover the full Volleyball Masterclass roster (18+ players) with deeper content.
-
-- Add remaining VMC players: Earvin Ngapeth, Matthew Anderson, Ivan Zaytsev, Osmany Juantorena, and others
-- Expand each player file from ~800 words to 1,500+ words
-- Add tactical content: rotation strategies, system play (5-1 vs 6-2), serve patterns
-- Add position-specific drills tied to each instructor
-- Tag content by skill level (beginner, intermediate, advanced) for filtered retrieval
-
----
-
-## Phase 2. Backend Upgrade
-
-**Goal:** Replace the local Streamlit setup with a proper API backend.
-
-- Migrate from Streamlit to a FastAPI REST backend
-- Replace local ChromaDB with a hosted vector DB (Pinecone or Qdrant)
-- Add a session management layer so conversation history persists across page reloads
-- Implement a query router: classify each question (technique, tactics, mindset, drill request) and adjust retrieval strategy per category
-- Add source confidence scoring so the UI can display how closely the answer matched the retrieved content
+- Python wiki pipeline: Writer → Evaluator → Editor (3-pass loop)
+- Pydantic v2 schemas between every stage
+- Player pages + auto-detected concept pages
+- D3 force-directed knowledge graph
+- React frontend: Chat tab, Wiki tab, Map tab
+- BM25 in-browser search (no vector DB)
+- Anthropic API called directly from the browser
+- Static JSON output: zero server required
 
 ---
 
-## Phase 3. Frontend Rebuild
+## Phase 3 (v0.2) — Next
 
-**Goal:** Replace Streamlit with a production-quality React frontend that matches the VMC brand.
+**Goal:** Cover the full Volleyball Masterclass roster with deeper content.
 
-- React + Vite + Tailwind
-- Replicate VMC design system: dark background (#0C0D12), gold accent (#FFD100), Barlow Condensed typography
-- Full 18-player sidebar with position filters (OH, OPP, S, MB, L)
-- Player profile cards: click a player to pre-load their context window
-- Message threading with citations rendered as player avatar tags
-- Mobile responsive layout
-- Framer Motion animations: message reveal, loading state, sidebar transitions
+- Expand to 18+ players: Ngapeth, Anderson, Zaytsev, Juantorena, and others
+- Grow each player file from ~1,000 words to 2,000+ words
+- Add position-specific drill libraries tied to each instructor
+- Tag content by skill level (beginner, intermediate, advanced)
+- Add tactical content: rotation systems, serve patterns, coverage schemes
 
 ---
 
-## Phase 4. VMC Integration Layer
+## Phase 4 (v0.5) — Planned
 
-**Goal:** Build the hooks needed to embed this inside an existing platform.
+**Goal:** Proper backend, hosted deployment, production-ready URL.
 
-- iFrame-embeddable widget mode (standalone chat component)
+- FastAPI REST backend replaces direct browser API calls
+- Hosted vector DB option (Pinecone or Qdrant) for larger corpora
+- Deploy to Railway or Render with a live URL
+- Session persistence across page reloads
+- Query classification: technique, tactics, mindset, drill request
+
+---
+
+## Phase 5 (v0.8) — Planned
+
+**Goal:** Platform integration hooks for VMC.
+
+- iFrame-embeddable widget mode
 - Auth handshake: pass a VMC subscriber token to gate access
-- Content sync: an admin endpoint that accepts new lesson transcripts and auto-ingests them into the vector DB
-- Analytics: log query topics, player citation frequency, unanswered questions (for content gap analysis)
+- Admin endpoint: accepts new lesson transcripts and auto-ingests
+- Analytics: query topics, player citation frequency, unanswered questions
 
 ---
 
-## Phase 5. Pitch Deliverables
+## Phase 6 (v1.0) — Planned
 
-**Goal:** Package everything needed to close the partnership conversation.
+**Goal:** Close the partnership conversation.
 
 - 3-minute Loom demo video
-- One-page PDF pitch overview (problem, solution, integration path, pricing model)
-- Live hosted demo URL (deployed on Railway or Render)
+- One-page PDF pitch overview
+- Live hosted demo URL
 - GitHub repo polished and public
-- Outreach email sequence (initial pitch, follow-up, final nudge)
-
----
-
-## Version Timeline (Target)
-
-| Version | Milestone | Target |
-|---|---|---|
-| v0.0 | Working prototype, 7 players, Streamlit | Done |
-| v0.1 | 18 players, expanded content, drill library | Week 2 |
-| v0.2 | FastAPI backend, hosted vector DB | Week 3 |
-| v0.5 | React frontend, production UI | Week 4 |
-| v0.8 | Widget mode, auth layer, analytics | Week 5 |
-| v1.0 | Full pitch package, live demo, outreach begins | Week 6 |
+- Outreach email sequence
