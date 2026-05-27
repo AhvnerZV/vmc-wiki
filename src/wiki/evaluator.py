@@ -3,11 +3,17 @@ evaluator.py — Pass 2
 Scores a wiki page draft 1-5 on coverage, clarity, and structure.
 """
 
+import re
 import json
-import anthropic
+from .client import get_client
 from .models import WikiPage, EvaluationResult
 
-client = anthropic.Anthropic()
+
+def _parse_json_response(raw: str) -> dict:
+    text = raw.strip()
+    text = re.sub(r"^```(?:json)?\s*", "", text)
+    text = re.sub(r"\s*```$", "", text)
+    return json.loads(text)
 
 
 def evaluate_page(page: WikiPage, source_content: str = "") -> EvaluationResult:
@@ -26,7 +32,7 @@ Return ONLY valid JSON — no markdown, no preamble:
   "improvements": ["specific improvement 1", "specific improvement 2"]
 }}
 
-Score 5 = publication ready. Score 3 = needs work. Score 1 = major rewrite needed.
+Score 5 = publication ready. Score 4 = good, minor polish only. Score 3 = needs work.
 List improvements only if score < 4. Max 3 improvements.
 
 PAGE TITLE: {page.title}
@@ -35,12 +41,12 @@ SUMMARY: {page.summary}
 SECTIONS:
 {sections_text}"""
 
+    client  = get_client()
     message = client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=400,
         messages=[{"role": "user", "content": prompt}]
     )
 
-    raw = message.content[0].text.strip()
-    data = json.loads(raw)
+    data = _parse_json_response(message.content[0].text)
     return EvaluationResult(**data)
