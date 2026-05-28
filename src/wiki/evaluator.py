@@ -5,7 +5,7 @@ Scores a wiki page draft 1-5 on coverage, clarity, and structure.
 
 import re
 import json
-from .client import get_client
+from .client import create_message_with_retry
 from .models import WikiPage, EvaluationResult
 
 
@@ -41,8 +41,7 @@ SUMMARY: {page.summary}
 SECTIONS:
 {sections_text}"""
 
-    client  = get_client()
-    message = client.messages.create(
+    message = create_message_with_retry(
         model="claude-sonnet-4-20250514",
         max_tokens=400,
         messages=[{"role": "user", "content": prompt}]

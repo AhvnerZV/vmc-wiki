@@ -5,7 +5,7 @@ Applies improvements to a wiki page draft based on evaluator feedback.
 
 import re
 import json
-from .client import get_client
+from .client import create_message_with_retry
 from .models import WikiPage, WikiSection, EvaluationResult
 
 
@@ -44,8 +44,7 @@ CURRENT SUMMARY: {page.summary}
 CURRENT SECTIONS:
 {json.dumps(sections_json, indent=2)}"""
 
-    client  = get_client()
-    message = client.messages.create(
+    message = create_message_with_retry(
         model="claude-sonnet-4-20250514",
         max_tokens=1500,
         messages=[{"role": "user", "content": prompt}]

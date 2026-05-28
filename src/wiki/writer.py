@@ -5,7 +5,7 @@ Generates a structured wiki page draft from raw source content.
 
 import json
 import re
-from .client import get_client
+from .client import create_message_with_retry
 from .models import WikiPage, WikiSection
 
 MAX_SOURCE_CHARS = 6000  # cap to prevent prompt injection via oversized files
@@ -58,8 +58,7 @@ Setter Decision Making, Mental Reset Protocols, Blocking Footprint, Serve Receiv
 RAW CONTENT:
 {safe_content}"""
 
-    client  = get_client()
-    message = client.messages.create(
+    message = create_message_with_retry(
         model="claude-sonnet-4-20250514",
         max_tokens=1500,
         messages=[{"role": "user", "content": prompt}]
@@ -108,8 +107,7 @@ Return ONLY valid JSON — no markdown fences, no preamble:
 PLAYER EXCERPTS:
 {excerpts_text}"""
 
-    client  = get_client()
-    message = client.messages.create(
+    message = create_message_with_retry(
         model="claude-sonnet-4-20250514",
         max_tokens=1500,
         messages=[{"role": "user", "content": prompt}]

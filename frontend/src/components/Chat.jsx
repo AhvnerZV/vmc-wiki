@@ -1,9 +1,12 @@
 import { useState, useRef, useEffect } from "react";
 import { search } from "../utils/bm25.js";
 
+const MAX_INPUT_CHARS  = 500;   // cap user input length
+const MAX_HISTORY_MSGS = 20;    // max messages kept in API context (10 exchanges)
+
 function buildSystemPrompt(pages) {
   const kb = pages.map(p =>
-    `[${p.title} — ${p.type}]\n${p.summary}\n${p.sections.map(s=>`${s.heading}: ${s.content}`).join("\n")}`
+    `[${p.title} — ${p.type}]\n${p.summary}\n${p.sections.map(s => `${s.heading}: ${s.content}`).join("\n")}`
   ).join("\n\n---\n\n");
 
   return `You are the VMC Wiki AI Coach — an elite volleyball knowledge assistant built on a structured wiki of world-class players and concepts.
@@ -16,23 +19,26 @@ RETRIEVED WIKI CONTENT:
 ${kb}`;
 }
 
-// Strip UI-only fields before sending to the API
+// Strip UI-only fields before sending to the Anthropic API.
+// Sending extra fields (e.g. sources) causes a 400 error.
 function toApiMessages(messages) {
-  return messages.map(({ role, content }) => ({ role, content }));
+  return messages
+    .slice(-MAX_HISTORY_MSGS) // keep only the last N messages to cap request size
+    .map(({ role, content }) => ({ role, content }));
 }
 
 export default function Chat({ wikiData, apiKey }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput]       = useState("");
   const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState("");   // inline error — no alert()
   const bottomRef               = useRef(null);
 
-  const allPages = [...(wikiData?.players || []), ...(wikiData?.concepts || [])];
-
-  // Read pre-baked env key as fallback, prefer UI-entered key
+  const allPages   = [...(wikiData?.players || []), ...(wikiData?.concepts || [])];
   const resolvedKey = apiKey || import.meta.env.VITE_ANTHROPIC_API_KEY || "";
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  useEffect(() => { if (error) { const t = setTimeout(() => setError(""), 5000); return () => clearTimeout(t); } }, [error]);
 
   const examples = [
     "How does León approach his jump serve?",
@@ -44,12 +50,18 @@ export default function Chat({ wikiData, apiKey }) {
   async function send(text) {
     const q = (text || input).trim();
     if (!q || loading) return;
+
     if (!resolvedKey) {
-      alert("Set your Anthropic API key first (top right).");
+      setError("Set your Anthropic API key first — click 'Set API key' in the top right.");
+      return;
+    }
+    if (q.length > MAX_INPUT_CHARS) {
+      setError(`Message too long. Please keep it under ${MAX_INPUT_CHARS} characters.`);
       return;
     }
 
     setInput("");
+    setError("");
     const relevant = search(q, allPages, 5);
     const userMsg  = { role: "user", content: q };
     const newMsgs  = [...messages, userMsg];
@@ -68,7 +80,7 @@ export default function Chat({ wikiData, apiKey }) {
           model:      "claude-sonnet-4-20250514",
           max_tokens: 800,
           system:     buildSystemPrompt(relevant),
-          messages:   toApiMessages(newMsgs), // stripped — no extra fields
+          messages:   toApiMessages(newMsgs),
         }),
       });
 
@@ -82,15 +94,18 @@ export default function Chat({ wikiData, apiKey }) {
       const cited = relevant.map(p => p.title);
       setMessages(m => [...m, { role: "assistant", content: reply, sources: cited }]);
     } catch (e) {
-      // Show a clean error without leaking internal details
-      const safe = e.message?.startsWith("API error") || e.message?.includes("status")
-        ? e.message
-        : "Something went wrong. Check your API key and try again.";
+      const safe = e.message?.includes("API error") || e.message?.includes("401")
+        ? "Invalid API key. Check your key and try again."
+        : e.message?.includes("429")
+        ? "Rate limited. Wait a moment and try again."
+        : "Something went wrong. Check your connection and try again.";
       setMessages(m => [...m, { role: "assistant", content: safe, sources: [] }]);
     } finally {
       setLoading(false);
     }
   }
+
+  const charsLeft = MAX_INPUT_CHARS - input.length;
 
   return (
     <div className="flex h-full">
@@ -111,17 +126,16 @@ export default function Chat({ wikiData, apiKey }) {
         ))}
       </aside>
 
-      {/* Chat area */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* API key warning banner */}
-        {!resolvedKey && (
-          <div className="bg-amber-900/30 border-b border-amber-700/50 px-6 py-2 text-amber-400 text-xs">
-            ⚠ API key not set. Your key is sent directly from the browser — do not use this on a public network.
-          </div>
-        )}
-        {resolvedKey && (
-          <div className="bg-surface border-b border-rim px-6 py-2 text-muted text-xs">
-            ⚠ API key is sent from your browser. For production use, proxy requests through a backend.
+        {/* Security warning banner */}
+        <div className="bg-surface border-b border-rim px-6 py-2 text-muted text-xs">
+          ⚠ API key is sent from your browser. For production, proxy requests through a backend.
+        </div>
+
+        {/* Inline error bar */}
+        {error && (
+          <div className="bg-red-900/40 border-b border-red-700/50 px-6 py-2 text-red-400 text-xs">
+            {error}
           </div>
         )}
 
@@ -185,23 +199,30 @@ export default function Chat({ wikiData, apiKey }) {
         </div>
 
         {/* Input */}
-        <div className="border-t border-rim p-4 flex gap-3">
-          <input
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && !loading && send()}
-            placeholder="Ask about serve technique, setting, blocking, mental performance..."
-            className="flex-1 bg-surface border border-rim rounded-lg px-4 py-3 text-sm text-txt focus:outline-none focus:border-volt placeholder-muted"
-          />
+        <div className="border-t border-rim p-4 flex gap-3 items-end">
+          <div className="flex-1 relative">
+            <input
+              value={input}
+              onChange={e => setInput(e.target.value.slice(0, MAX_INPUT_CHARS))}
+              onKeyDown={e => e.key === "Enter" && !loading && send()}
+              placeholder="Ask about serve technique, setting, blocking, mental performance..."
+              className="w-full bg-surface border border-rim rounded-lg px-4 py-3 text-sm text-txt focus:outline-none focus:border-volt placeholder-muted"
+            />
+            {input.length > MAX_INPUT_CHARS * 0.8 && (
+              <span className={`absolute right-3 bottom-3 text-xs ${charsLeft < 50 ? "text-red-400" : "text-muted"}`}>
+                {charsLeft}
+              </span>
+            )}
+          </div>
           <button
             onClick={() => send()}
             disabled={loading || !input.trim()}
-            className="bg-volt text-court font-condensed font-black text-sm tracking-widest px-6 rounded-lg disabled:opacity-40 hover:bg-yellow-300 transition-colors"
+            className="bg-volt text-court font-condensed font-black text-sm tracking-widest px-6 py-3 rounded-lg disabled:opacity-40 hover:bg-yellow-300 transition-colors"
           >
             ASK
           </button>
           {messages.length > 0 && (
-            <button onClick={() => setMessages([])} className="text-muted text-xs hover:text-txt px-2">
+            <button onClick={() => setMessages([])} className="text-muted text-xs hover:text-txt px-2 py-3">
               Clear
             </button>
           )}
