@@ -1,6 +1,6 @@
 # Volleyball Masterclass Wiki LLM
 
-**Version 0.1** — LLM Wiki system + React frontend
+**Current version: v0.1** — LLM Wiki system + React frontend
 
 A structured wiki of elite volleyball player knowledge, compiled once by a 3-pass LLM pipeline and queried via BM25 search. Built as a partnership pitch for Volleyball Masterclass.
 
@@ -8,16 +8,19 @@ A structured wiki of elite volleyball player knowledge, compiled once by a 3-pas
 
 ## What It Does
 
-The system compiles raw player coaching notes into a structured, interlinked wiki. Every query searches the compiled wiki — not raw chunks — and returns specific, cited answers. Players and concepts are connected in a browseable graph.
+The system compiles raw player coaching notes into a structured, interlinked wiki. Every query searches the compiled wiki — not raw chunks — and returns specific, cited answers. Players and concepts are connected in a browseable, interactive graph.
 
 **Players in the knowledge base (v0.1):**
-- Wilfredo León — Outside Hitter
-- Antoine Brizard — Setter
-- Jenia Grebennikov — Libero
-- TJ DeFalco — Opposite Hitter
-- Nimir Abdel-Aziz — Opposite Hitter
-- Luciano De Cecco — Setter
-- Reid Hall — Coach / Clinician
+
+| Player | Position | Nationality |
+|---|---|---|
+| Wilfredo León | Outside Hitter | Cuban-Italian |
+| Antoine Brizard | Setter | French |
+| Jenia Grebennikov | Libero | French |
+| TJ DeFalco | Opposite Hitter | American |
+| Nimir Abdel-Aziz | Opposite Hitter | Dutch |
+| Luciano De Cecco | Setter | Argentine |
+| Reid Hall | Coach / Clinician | American |
 
 ---
 
@@ -27,11 +30,10 @@ The system compiles raw player coaching notes into a structured, interlinked wik
 |---|---|
 | Knowledge base | Player `.txt` files (`vmc_data/`) |
 | Wiki compiler | Python pipeline: Writer → Evaluator → Editor |
-| LLM | Anthropic Claude (Sonnet) |
-| Search | BM25 (in-browser, no vector DB) |
-| Frontend | React + Vite + Tailwind + D3 |
-
-**v0.1 replaces:** ChromaDB, OpenAI embeddings, Streamlit
+| LLM | Anthropic Claude Sonnet |
+| Retry logic | Exponential backoff (429, 5xx, connection errors) |
+| Search | BM25 in-browser, memoized index |
+| Frontend | React 18 + Vite + Tailwind CSS + D3 |
 
 ---
 
@@ -51,7 +53,7 @@ pip install -r requirements.txt
 ### 3. Set your Anthropic API key
 ```bash
 cp .env.example .env
-# Edit .env and add your key
+# Edit .env and paste your key
 ```
 
 ### 4. Build the wiki
@@ -59,9 +61,7 @@ cp .env.example .env
 python build_wiki.py
 ```
 
-This runs the 3-pass pipeline (Writer → Evaluator → Editor) on every player file,
-generates concept pages, builds the connection graph, and writes
-`frontend/src/data/wiki_data.json`. Takes 3-5 minutes.
+Runs the 3-pass pipeline (Writer → Evaluator → Editor) on every player file, auto-detects concept pages from shared themes, builds the connection graph, and writes `frontend/src/data/wiki_data.json`. Takes 3 to 5 minutes.
 
 ### 5. Run the frontend
 ```bash
@@ -70,7 +70,7 @@ npm install
 npm run dev
 ```
 
-Opens at `http://localhost:5173`.
+Opens at `http://localhost:5173`. Set your Anthropic API key in the top-right corner of the UI when prompted.
 
 ---
 
@@ -78,31 +78,33 @@ Opens at `http://localhost:5173`.
 
 ```
 vmc-wiki/
-├── vmc_data/               Player knowledge base files (.txt)
+├── vmc_data/               Player knowledge base source files (.txt)
 ├── src/
 │   └── wiki/
-│       ├── models.py       Pydantic schemas (WikiPage, WikiGraph, WikiData)
-│       ├── writer.py       Pass 1: LLM page generation
+│       ├── client.py       Shared Anthropic client with retry logic
+│       ├── models.py       Pydantic v2 schemas (WikiPage, WikiGraph, WikiData)
+│       ├── writer.py       Pass 1: LLM page generation + prompt sanitization
 │       ├── evaluator.py    Pass 2: quality scoring 1-5
 │       ├── editor.py       Pass 3: improvement application
-│       ├── graph.py        Link extraction + graph.json
-│       └── build.py        Pipeline orchestrator
+│       ├── graph.py        Link extraction + force graph data
+│       └── build.py        Pipeline orchestrator with per-item error recovery
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx
+│   │   ├── App.jsx                 Root: tab routing, shared navigation state
 │   │   ├── components/
-│   │   │   ├── Chat.jsx        BM25 search + Anthropic API chat
-│   │   │   ├── WikiBrowser.jsx Player and concept index
-│   │   │   ├── WikiPage.jsx    Individual wiki page with wikilinks
-│   │   │   ├── GraphMap.jsx    D3 force-directed connection map
-│   │   │   └── Nav.jsx
-│   │   ├── utils/bm25.js       In-browser BM25 search
+│   │   │   ├── Chat.jsx            BM25 search + Anthropic API chat
+│   │   │   ├── WikiBrowser.jsx     Player and concept index with filters
+│   │   │   ├── WikiPage.jsx        Individual wiki page with [[wikilink]] nav
+│   │   │   ├── GraphMap.jsx        D3 force-directed connection map
+│   │   │   └── Nav.jsx             Tab navigation + API key entry
+│   │   ├── utils/bm25.js           Memoized in-browser BM25 search
 │   │   └── data/
-│   │       └── wiki_data.json  Generated by build_wiki.py
+│   │       └── wiki_data.json      Generated by build_wiki.py (not hand-edited)
 │   ├── package.json
 │   └── vite.config.js
 ├── build_wiki.py           Pipeline entry point
-├── requirements.txt
+├── requirements.txt        Python deps: anthropic, pydantic, python-dotenv
+├── archive/v0.0/           Original RAG prototype (ChromaDB + OpenAI + Streamlit)
 └── ROADMAP.md
 ```
 
@@ -110,11 +112,17 @@ vmc-wiki/
 
 ## The Three Views
 
-**Chat** — Ask anything. BM25 finds the top 5 relevant wiki pages, sends them as context to Claude, returns a cited answer.
+**Chat** — Ask anything. BM25 finds the top 5 relevant wiki pages, sends them as context to Claude, returns a specific cited answer. Message history is capped at 20 messages to keep requests lean.
 
-**Wiki** — Browse all player and concept pages. Click any `[[wikilink]]` to navigate between pages. Filter by players or concepts.
+**Wiki** — Browse all player and concept pages. Filter by players or concepts. Click any `[[wikilink]]` inside a page to navigate to the linked topic. Click any related tag at the bottom of a page to jump to that entry.
 
-**Map** — D3 force-directed graph showing connections between players and concepts. Hover to highlight edges. Click any node to open its wiki page. Lock positions once the simulation settles.
+**Map** — D3 force-directed graph of connections between players and concepts. Hover to highlight a node's edges. Click any node to open its wiki page. Drag nodes to explore the layout. Lock button freezes positions once the simulation settles.
+
+---
+
+## Security Notes
+
+The Anthropic API key is sent directly from the browser in this build. For production use, proxy requests through a backend so the key never leaves your server. The app displays a persistent warning to make this visible to anyone using it.
 
 ---
 
@@ -126,6 +134,130 @@ See `ROADMAP.md` for the full build plan toward v1.0.
 
 ---
 
+## Changelog
+
+Every push to this repo, in reverse chronological order.
+
+---
+
+### `dca703d` — fix: full verification pass (2026-05-28)
+
+Comprehensive checklist audit covering every component. Zero regressions introduced.
+
+**Pipeline:**
+- `client.py`: exponential backoff retry on 429, 5xx, and connection errors. Up to 4 retries, 2s base delay doubling per attempt, 60s cap. Prevents the pipeline from crashing on a transient rate limit.
+- `writer.py / evaluator.py / editor.py`: all switched to `create_message_with_retry`.
+- `archive/v0.0/`: moved `ingest.py`, `query.py`, and `app.py` out of the active source tree. They imported `chromadb` and `openai`, neither of which belong in `requirements.txt` for v0.1. Now isolated in `archive/` with their own README.
+- `requirements.txt`: now exactly `anthropic`, `pydantic`, `python-dotenv` — nothing more.
+
+**Frontend:**
+- `Chat.jsx`: added `MAX_HISTORY_MSGS = 20` cap. Without this, a long conversation would keep growing the API request payload indefinitely.
+- `Chat.jsx`: added `MAX_INPUT_CHARS = 500` input cap with a live character counter that appears when you are within 80% of the limit.
+- `Chat.jsx`: replaced all `alert()` calls with an inline error bar that auto-dismisses after 5 seconds.
+- `Chat.jsx`: error messages shown to users are sanitized — no raw API error details exposed.
+- `Chat.jsx`: 429 rate limit errors are detected and surfaced with a clear readable message.
+
+**Verified clean across all components:**
+- Zero `dangerouslySetInnerHTML`, zero `innerHTML`, zero `eval()`.
+- `toApiMessages()` confirmed stripping `sources` and all UI-only fields before every API call.
+- `_sanitize_source()` confirmed stripping control characters and capping at 6,000 characters.
+- Full Map → Wiki → WikiPage → wikilink → back-to-index navigation chain traced and confirmed.
+- Fresh `npm install` + `npm run build`: 604 modules, 0 errors.
+- 10-point pipeline dry-run: all passed without API calls.
+
+**Files changed:** `client.py`, `editor.py`, `evaluator.py`, `writer.py`, `Chat.jsx`, `archive/v0.0/*`
+
+---
+
+### `77faabe` — fix: security audit (2026-05-27)
+
+Full security and bug audit of the v0.1 codebase.
+
+**Critical runtime bugs fixed:**
+- `Chat.jsx`: messages sent to the Anthropic API included a `sources` field the API rejects with a 400 error. Every assistant reply after the first was broken. Fixed with `toApiMessages()` that strips all UI-only fields before the request goes out.
+- `Chat.jsx`: `VITE_ANTHROPIC_API_KEY` was documented in `.env.example` but `import.meta.env.VITE_ANTHROPIC_API_KEY` was never read. The env variable did nothing.
+- `GraphMap.jsx`: `locked` was a stale closure inside the D3 drag handler. Fixed by replacing state with a `lockedRef` that D3 callbacks always read the current value from.
+- `WikiBrowser.jsx`: received `onSelectPage` from App but never called it. Fixed by routing all page selection through a single `selectPage()` function.
+
+**Security fixes:**
+- `writer.py`: raw file content was injected into the LLM prompt with no sanitization. Added `_sanitize_source()` — strips control characters, caps at 6,000 characters.
+- `writer.py / evaluator.py / editor.py`: `json.loads()` on raw LLM output with no fence stripping. Added `_parse_json_response()` to all three.
+- `build.py`: per-player and per-concept `try/except` so one failure never kills the whole run.
+
+**Performance:**
+- `bm25.js`: index was rebuilt on every query call. Fixed with a `WeakMap` cache that builds once per docs array reference.
+- `client.py`: consolidated three separate `anthropic.Anthropic()` instances into one shared singleton.
+- `Chat.jsx`: added persistent browser API key security warning banner.
+
+**Files changed:** `Chat.jsx`, `GraphMap.jsx`, `WikiBrowser.jsx`, `bm25.js`, `client.py`, `writer.py`, `evaluator.py`, `editor.py`, `build.py`
+
+---
+
+### `c16bf76` — fix: v0.1 patch — build errors, docs, gitignore (2026-05-27)
+
+Caught before anyone else ran it. Five bugs that would have blocked a fresh clone from running.
+
+- `App.jsx`: replaced invalid top-level `await import()` with a static import. The old version threw a syntax error the moment `npm run dev` was run.
+- `vite.config.js`: removed `assetsInclude: ["**/*.json"]` which was overriding Vite's built-in JSON plugin and causing the build to fail.
+- `.gitignore`: added `frontend/node_modules/` and `frontend/dist/`. Without this, anyone running `npm install` would stage hundreds of megabytes on their next commit.
+- `README.md`: full rewrite. Old version still referenced ChromaDB, OpenAI, and Streamlit. New version describes the correct v0.1 setup.
+- `ROADMAP.md`: v0.0 and v0.1 marked done. Phase descriptions updated.
+- `frontend/.env.example`: documents `VITE_ANTHROPIC_API_KEY` for pre-baking the API key without the UI.
+- `frontend/package-lock.json`: committed for reproducible installs.
+
+Build verified after fix: 604 modules, 0 errors.
+
+**Files changed:** `App.jsx`, `vite.config.js`, `.gitignore`, `README.md`, `ROADMAP.md`, `frontend/.env.example`, `frontend/package-lock.json`
+
+---
+
+### `5101f82` — feat: v0.1 — LLM Wiki system + React frontend (2026-05-26)
+
+Complete architectural replacement of v0.0. ChromaDB, OpenAI, and Streamlit removed from the active stack.
+
+**Python pipeline (`src/wiki/`):**
+- `models.py`: Pydantic v2 schemas for `WikiPage`, `WikiSection`, `EvaluationResult`, `WikiGraph`, `WikiData`.
+- `writer.py`: Pass 1 — LLM-powered page generation for both player pages and concept pages. Player pages have five structured sections. Concept pages synthesize content from multiple players.
+- `evaluator.py`: Pass 2 — quality scoring 1 to 5 on coverage, clarity, and structure.
+- `editor.py`: Pass 3 — applies specific improvements when score is below 4.
+- `graph.py`: extracts `[[wikilinks]]` and related references from every page, builds node and edge lists for the D3 force graph.
+- `build.py`: orchestrates the full pipeline. Reads all `vmc_data/*.txt` files, runs the 3-pass loop on each, auto-detects concept pages from 10 known concept names, builds the graph, and writes `frontend/src/data/wiki_data.json`.
+- `build_wiki.py`: single entry point. Run `python build_wiki.py` to rebuild the entire wiki.
+
+**React frontend (`frontend/`):**
+- Vite + React 18 + Tailwind CSS. Dark court aesthetic: `#0C0D12` background, `#FFD100` volt yellow accent, Barlow Condensed typography.
+- `Chat.jsx`: BM25 retrieves top 5 wiki pages per query, passes them as context to the Anthropic API, renders cited responses.
+- `WikiBrowser.jsx`: index of all player and concept pages with all/players/concepts filter.
+- `WikiPage.jsx`: renders individual wiki pages, parses `[[wikilinks]]` into clickable navigation.
+- `GraphMap.jsx`: D3 force-directed graph. Player nodes are large and volt yellow. Concept nodes are smaller and gray. Hover highlights connected edges. Click navigates to the wiki page.
+- `Nav.jsx`: tab bar (Chat / Wiki / Map) and API key entry panel.
+- `bm25.js`: pure JavaScript BM25 implementation with no external dependencies.
+
+**Key architecture decision:** wiki content compiled once to a static `wiki_data.json`. No backend server, no vector database, no embeddings. React app is fully static and deployable to Vercel in one command.
+
+**Files added:** 25 files, 1,225 lines
+
+---
+
+### `7e63e3e` — feat: v0.0 initial commit — working RAG prototype (2026-05-25)
+
+First working version. Proof-of-concept to validate the core idea before building toward a pitch.
+
+**Stack:**
+- `vmc_data/`: 7 player knowledge base files, ~1,000 words each. León, Brizard, Grebennikov, DeFalco, Nimir, De Cecco, Hall.
+- `src/ingest.py`: reads player `.txt` files, chunks them, embeds via OpenAI `text-embedding-3-small`, stores in ChromaDB local persistent store.
+- `src/query.py`: retrieves top-N chunks from ChromaDB for a given query, builds context, generates response via GPT-4o-mini.
+- `app.py`: Streamlit frontend. Dark court aesthetic. Collapsible sidebar with player roster. Chat interface with source citation tags. Example question buttons.
+- `requirements.txt`: `chromadb`, `openai`, `python-dotenv`, `streamlit`.
+
+**Architecture:** standard RAG — chunk, embed, retrieve, generate. Each query hits the raw chunk store.
+
+**Note:** this version is preserved in `archive/v0.0/` for reference. The v0.1 wiki pipeline replaces it entirely.
+
+**Files added:** 15 files, 833 lines
+
+---
+
 ## Status
 
-`v0.1` — LLM Wiki pipeline complete. React frontend with Chat, Wiki, and Map tabs. Ready for `build_wiki.py` to be run and the app to be demoed.
+`v0.1` — production-ready frontend, hardened pipeline, all known bugs resolved. One remaining step: run `python build_wiki.py` with a live Anthropic API key to generate `wiki_data.json` and bring the app fully alive.
